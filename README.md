@@ -12,9 +12,27 @@ El sistema identifica cada vehículo que pasa por una caseta con **tres inferenc
 | | Tarea | Tipo de inferencia | Modelo |
 |---|---|---|---|
 | **M1** | Placa boliviana (`^\d{3,4}[A-Z]{3}$`) | Detección + OCR | YOLOv9-t ONNX + fast-plate-ocr |
-| **M2** | Categoría: auto, minibús, bus, camión (+ moto) | Segmentación de instancias | YOLO11s-seg (Roboflow + Colab) |
-| **M3** | Número de ejes | Keypoints de llantas (5 por llanta) | YOLO11s-pose (Roboflow + Colab) |
-| **M4** *(bono)* | Pasajeros visibles dentro del vehículo | Segmentación (clase persona) | YOLO11s-seg — **sin reconocimiento facial** |
+| **M2** | Categoría: auto, minibús, bus, camión | Segmentación de instancias | YOLO11s-seg entrenado en Colab con un dataset público |
+| **M3** | Número de ejes | Keypoints de llantas (5 por llanta) | YOLO11s-pose entrenado en Colab con keypoints derivados de cajas |
+| **M4** *(bono)* | Pasajeros visibles dentro del vehículo | Segmentación (clase persona) | YOLO11s-seg COCO preentrenado — **sin reconocimiento facial** |
+
+### Origen y alcance de los modelos
+
+Los modelos de visión se entrenan o evalúan con **datasets públicos de Roboflow Universe**, citados en
+[`entrenamiento/DATASETS.md`](entrenamiento/DATASETS.md):
+
+* **M2** se entrena con *Vehicle Segmentation* (Akash Bauri, CC BY 4.0), que es tráfico de la India. Sus clases se
+  remapean a las categorías del peaje (el `auto` del dataset es el auto-rickshaw y se descarta). Además se
+  **evalúa en las 22 fotos bolivianas** del repositorio para medir cómo funciona en nuestro contexto.
+  Ver `m2_metricas.json` y `m2_eval_bolivia.csv`.
+* **M3** se entrena con las cajas `axle` del dataset *axle* (eternal). Los **5 keypoints por llanta se derivan
+  geométricamente de cada caja**: no se etiquetaron a mano. El MAE de ejes compara el número de cajas por imagen
+  con el conteo del servidor. Ver `m3_metricas.json`.
+* **M4** usa `yolo11s-seg` **preentrenado en COCO, sin fine-tuning**. Se evalúa contando personas en
+  *Car and Persons* (YOLOv8 CarsPerson, CC BY 4.0), que son peatones en la calle y no pasajeros dentro de un
+  vehículo. Ver `m4_metricas.json`.
+
+Las métricas no se copian aquí: salen de cada ejecución en Colab y se guardan en `MyDrive/peaje-ia/metricas/`.
 
 > **Cero recursos locales:** Roboflow (datasets) → Colab (entrenamiento) → **RunPod** (inferencia, puerto 8000) →
 > subdominio **HTTPS** en **Render** (Laravel en Docker + PostgreSQL: web + API + BD + agente) → **Pusher**
@@ -26,7 +44,7 @@ El sistema identifica cada vehículo que pasa por una caseta con **tres inferenc
 |---|---|
 | Panel web (subdominio HTTPS, Render) | `https://peaje-ia.onrender.com` o `https://peaje.tu-dominio.com` ← *reemplazar* |
 | Servidor de inferencia RunPod | `https://<POD_ID>-8000.proxy.runpod.net/health` ← *reemplazar* |
-| Datasets de Roboflow (M2 vehículos · M3 llantas · M4 pasajeros) | `https://universe.roboflow.com/<workspace>/<proyecto-m2>` · `…/<proyecto-m3>` · `…/<proyecto-m4>` ← *reemplazar* |
+| Datasets de Roboflow (públicos, citados en [`entrenamiento/DATASETS.md`](entrenamiento/DATASETS.md)) | **M2** [Vehicle Segmentation](https://universe.roboflow.com/akash-bauri-nyofc/vehicle-segmentation) — Akash Bauri, v4, CC BY 4.0 · **M3** [axle](https://universe.roboflow.com/eternal-wiecw/axle-bjpov) — eternal, v5, licencia no indicada · **M4** [Car and Persons](https://universe.roboflow.com/yolov8-carsperson/car-and-persons) — YOLOv8 CarsPerson, v1, CC BY 4.0 |
 | APK Android | carpeta de Google Drive `/apk` |
 | Video demostrativo (8–12 min) | carpeta de Google Drive `/video` |
 | Exportación de la BD | carpeta de Google Drive `/base_de_datos` (`php artisan peaje:exportar-bd`) |
@@ -54,9 +72,10 @@ Detalle (secuencias, ER, decisiones): [`docs/arquitectura.md`](docs/arquitectura
 sistema-peaje-ia/
 ├── entrenamiento/                 # 4 notebooks autocontenidos para Colab T4
 │   ├── 01_m1_placas_bolivia_ocr.ipynb        # SHA-256, fast-plate-ocr vs EasyOCR vs Tesseract, métricas OCR
-│   ├── 02_m2_segmentacion_vehiculos_yoloseg.ipynb   # mAP50/50-95 box+mask, matriz de confusión
-│   ├── 03_m3_keypoints_llantas_yolopose.ipynb       # auto-etiquetado, mAP50 pose, MAE de ejes
-│   └── 04_m4_segmentacion_pasajeros.ipynb           # mAP + MAE de conteo, privacidad
+│   ├── 02_m2_segmentacion_vehiculos_yoloseg.ipynb   # dataset público + remapeo, mAP box/mask, fotos bolivianas
+│   ├── 03_m3_keypoints_llantas_yolopose.ipynb       # cajas axle -> 5 keypoints, mAP50 pose, MAE de ejes
+│   ├── 04_m4_segmentacion_pasajeros.ipynb           # evaluación COCO: MAE de conteo, privacidad
+│   └── DATASETS.md                                  # datasets usados: autor, licencia, versión, mapeo, BibTeX
 ├── inferencia/                    # FastAPI unificado (RunPod + Colab)
 │   ├── app.py                     # GET /health · POST /inferir · POST /inferir-placa
 │   ├── peaje_ia/                  # m1_placas · m2_vehiculos · m3_ejes · m4_pasajeros · anotador · pipeline
@@ -197,3 +216,5 @@ y FastAPI. Estas evidencias van a la carpeta de Drive. Cada servicio fija sus pr
 
 Detector y lector de placas: `open-image-models` y `fast-plate-ocr` (ankandrew). Lógica de ejes basada en el
 notebook del docente *keypoints_llantas_yolo_detectron2_v3*. Ultralytics YOLO11 / YOLOE.
+Datasets de Roboflow Universe: *Vehicle Segmentation* (Akash Bauri, CC BY 4.0), *axle* (eternal) y
+*Car and Persons* (YOLOv8 CarsPerson, CC BY 4.0). Detalle y BibTeX en [`entrenamiento/DATASETS.md`](entrenamiento/DATASETS.md).

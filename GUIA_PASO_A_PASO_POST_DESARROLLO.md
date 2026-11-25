@@ -48,6 +48,11 @@ git commit -m "Sistema Inteligente de Control de Peaje: entrenamiento, inferenci
 
 ## Paso 1 · Datasets en Roboflow
 
+> **Los notebooks 02, 03 y 04 ya usan datasets públicos etiquetados de Roboflow Universe**
+> (ver [`entrenamiento/DATASETS.md`](entrenamiento/DATASETS.md)): **no hace falta sacar fotos ni etiquetar**.
+> De este paso solo necesitas los puntos 1 y 2 (cuenta y API key). Las secciones 1.1–1.3 quedan como
+> referencia por si algún día quieres un dataset propio de La Paz/El Alto.
+
 1. Crea una cuenta en <https://roboflow.com> (plan gratuito) y un **Workspace** (anota su *slug*, p. ej. `juan-peaje`).
 2. **API key:** *Settings → API Keys → Private API Key → Copy*. **No** la pegues en código ni en el repo.
    En Colab irá en **🔑 Secretos** con el nombre `ROBOFLOW_API_KEY`.
@@ -94,18 +99,20 @@ Para cada notebook de `entrenamiento/`:
 2. *Entorno de ejecución → Cambiar tipo de entorno → **T4 GPU*** → Guardar.
 3. Icono **🔑 (Secretos)** de la barra izquierda → *Agregar secreto* `ROBOFLOW_API_KEY` = tu clave → activa
    *Acceso del notebook*.
-4. Edita las variables `RF_WORKSPACE`, `RF_PROYECTO`, `RF_VERSION` (y `REPO_URL` en el 01).
-5. *Entorno de ejecución → Ejecutar todas*. Acepta montar Google Drive cuando lo pida.
+4. Los notebooks 02–04 ya traen el dataset público configurado (`RF_WORKSPACE`, `RF_PROYECTO`, `RF_VERSION`)
+   y el `REPO_URL`. No hay que editar nada. Si no existe el secreto, la celda pide la key con `getpass`.
+5. *Entorno de ejecución → Ejecutar todas*. Acepta montar Google Drive cuando lo pida (al final de cada notebook).
 
 | Notebook | Duración aprox. (T4) | Descarga | Copia en Drive |
 |---|---|---|---|
 | `01_m1_placas_bolivia_ocr` | 5–10 min | `m1_metricas_ocr.csv`, `m1_detalle_ocr.csv` | — |
-| `02_m2_segmentacion_vehiculos_yoloseg` | 30–45 min (80 épocas) | `m2_vehiculos_seg.pt`, `m2_metricas.json` | `MyDrive/peaje-ia/pesos/` |
-| `03_m3_keypoints_llantas_yolopose` | 30–50 min (100 épocas) | `m3_llantas_pose.pt`, `m3_metricas.json` | `MyDrive/peaje-ia/pesos/` |
-| `04_m4_segmentacion_pasajeros` | 20–30 min (60 épocas) | `m4_pasajeros_seg.pt`, `m4_metricas.json` | `MyDrive/peaje-ia/pesos/` |
+| `02_m2_segmentacion_vehiculos_yoloseg` | ≤ 0.9 h de entrenamiento (40 épocas, tope por callback) | `m2_vehiculos_seg.pt`, `m2_metricas.json`, `m2_eval_bolivia.csv`, matriz de confusión | `pesos/` y `metricas/m2/` |
+| `03_m3_keypoints_llantas_yolopose` | ≤ 0.5 h de entrenamiento (50 épocas, tope por callback) | `m3_llantas_pose.pt`, `m3_metricas.json`, `m3_eval_ejes.csv` | `pesos/` y `metricas/m3/` |
+| `04_m4_segmentacion_pasajeros` | 5–15 min (solo evaluación, sin entrenar) | `m4_pasajeros_seg.pt` (COCO), `m4_metricas.json`, `m4_eval_conteo.csv` | `pesos/` y `metricas/m4/` |
 
-6. Captura pantalla de: tabla de métricas OCR (01), mAP + matriz de confusión (02), mAP50 pose + **MAE de ejes**
-   (03), tabla línea base vs fine-tuning (04). Van a Drive `/recursos/metricas` y al informe.
+6. Captura pantalla de: tabla de métricas OCR (01); mAP, matriz de confusión y exactitud en fotos bolivianas
+   (02); mAP50 pose y **MAE de ejes** (03); MAE y % exacto del conteo de personas (04). Van a Drive
+   `/recursos/metricas`.
 7. Si Colab se desconecta: los pesos parciales quedan en `/content/runs/...`; vuelve a ejecutar desde la celda de
    entrenamiento con `resume=True` o copia `runs` a Drive antes.
 
