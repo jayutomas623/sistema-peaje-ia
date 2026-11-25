@@ -3,9 +3,18 @@
 /*
 | Tiempo real del panel. Por defecto Pusher (Channels, plan gratuito): funciona en hosting compartido
 | y VPS sin abrir puertos de WebSocket. Alternativa auto-hospedada: Laravel Reverb (BROADCAST_CONNECTION=reverb).
+|
+| Si el driver elegido no tiene su clave (durante `docker build`, o PUSHER_APP_KEY aún sin cargar en Render) se cae
+| de forma segura a 'log': ningún comando Artisan ni request falla y el panel usa sondeo HTTP en lugar de WebSocket.
 */
+$broadcaster = env('BROADCAST_CONNECTION', 'pusher');
+if (($broadcaster === 'pusher' && blank(env('PUSHER_APP_KEY')))
+    || ($broadcaster === 'reverb' && blank(env('REVERB_APP_KEY')))) {
+    $broadcaster = 'log';
+}
+
 return [
-    'default' => env('BROADCAST_CONNECTION', 'pusher'),
+    'default' => $broadcaster,
 
     'connections' => [
         'pusher' => [

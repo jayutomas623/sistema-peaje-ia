@@ -64,11 +64,14 @@ RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 
 # ---------- Código ----------
 COPY . .
-RUN composer dump-autoload --optimize --no-dev \
- && php artisan package:discover --ansi \
+# Durante `docker build` no existen las variables de Render (PUSHER_*, APP_KEY…): Laravel arranca sin broadcaster.
+# sed elimina CRLF por si el repositorio se clonó en Windows (sh no ejecuta scripts con \r).
+RUN BROADCAST_CONNECTION=null composer dump-autoload --optimize --no-dev \
+ && BROADCAST_CONNECTION=null php artisan package:discover --ansi \
  && mkdir -p storage/app/public storage/framework/cache/data storage/framework/sessions \
              storage/framework/views storage/logs bootstrap/cache \
  && chown -R www-data:www-data storage bootstrap/cache database \
+ && sed -i 's/\r$//' docker-entrypoint.sh \
  && chmod +x docker-entrypoint.sh
 
 EXPOSE 8000
