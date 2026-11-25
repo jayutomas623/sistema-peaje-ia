@@ -23,7 +23,7 @@
 #include <ArduinoJson.h>
 #include "secrets.h"
 
-#define FW_VERSION "1.0.0"
+#define FW_VERSION "1.0.1"
 
 // ---------------- Pines (ver DIAGRAMA_CONEXION.md) ----------------
 const int PIN_LED_AZUL  = 25;
@@ -166,9 +166,14 @@ void consultarEvento() {
   String url = String("https://") + API_HOST + "/api/v1/hardware/ultimo-evento?caseta_id=" + CASETA_ID +
                "&rssi=" + WiFi.RSSI() + "&fw=" + FW_VERSION;
   if (!http.begin(clienteTls, url)) { Serial.println("[http] begin falló"); return; }
+
+  // HTTP/1.0 sin compresión evita transferencia chunked/gzip detrás del proxy de Render
+  http.useHTTP10(true);
   http.addHeader("X-Hardware-Token", HARDWARE_TOKEN);
   http.addHeader("Accept", "application/json");
+  http.addHeader("Accept-Encoding", "identity");
   http.setTimeout(5000);
+
   int codigo = http.GET();
   if (codigo != 200) {
     fallosSeguidos++;
@@ -177,11 +182,17 @@ void consultarEvento() {
     if (fallosSeguidos >= 5 && modo == IDLE) programarBeeps(1, 600, 60);
     return;
   }
+
   fallosSeguidos = 0;
-  JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, http.getStream());
+  String cuerpo = http.getString();
   http.end();
-  if (err) { Serial.printf("[json] %s\n", err.c_str()); return; }
+
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, cuerpo);
+  if (err) {
+    Serial.printf("[json] %s | body=%s\n", err.c_str(), cuerpo.substring(0, 120).c_str());
+    return;
+  }
 
   long id = doc["id"] | 0L;
   const char* tipo = doc["tipo_senal"] | "idle";
