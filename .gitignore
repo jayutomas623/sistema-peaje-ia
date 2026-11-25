@@ -1,0 +1,107 @@
+# =====================================================================
+#  .gitignore ESTRICTO — Sistema Inteligente de Control de Peaje
+#  Regla: NUNCA subir secretos (penalización -10 pts).
+#  Solo se versionan plantillas: .env.example y secrets.h.example
+# =====================================================================
+
+# ---------- Secretos y credenciales (TODOS los servicios) ----------
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.env
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+key.properties
+**/android/key.properties
+google-services.json
+GoogleService-Info.plist
+client_secret*.json
+credentials*.json
+service-account*.json
+secrets.h
+!secrets.h.example
+**/secrets.json
+auth.json
+*.token
+api_keys.txt
+roboflow_api_key*
+kaggle.json
+
+# ---------- Pesos y artefactos pesados de ML ----------
+*.pt
+*.pth
+*.onnx
+*.engine
+*.torchscript
+*.safetensors
+inferencia/modelos/
+inferencia/pesos/*
+!inferencia/pesos/.gitkeep
+runs/
+datasets/
+dataset_*/
+*.zip
+*.tar.gz
+evidencia_entorno*.txt
+evidencia_entorno*.json
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+.pytest_cache/
+*.egg-info/
+
+# ---------- Laravel (web) ----------
+web/vendor/
+web/node_modules/
+web/public/build/
+web/public/hot
+web/public/storage
+web/storage/*.key
+web/storage/app/public/evidencias/*
+!web/storage/app/public/evidencias/.gitkeep
+web/storage/framework/cache/data/*
+web/storage/framework/sessions/*
+web/storage/framework/views/*
+web/storage/logs/*
+web/storage/exports/*
+web/database/*.sqlite
+web/database/*.sqlite-journal
+web/.phpunit.result.cache
+web/.phpunit.cache/
+
+# ---------- Flutter (movil) ----------
+movil/.dart_tool/
+movil/.flutter-plugins
+movil/.flutter-plugins-dependencies
+movil/build/
+movil/.packages
+movil/android/.gradle/
+movil/android/local.properties
+movil/android/app/upload-keystore*
+movil/android/app/*.jks
+movil/ios/Pods/
+movil/ios/Flutter/Generated.xcconfig
+*.apk
+*.aab
+
+# ---------- Sistema / IDE ----------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+*.swp
+
+# Artefactos descargados por Ultralytics/YOLOE
+inferencia/*.ts
+inferencia/evidencias/

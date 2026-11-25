@@ -1,0 +1,24 @@
+# Nunca dentro de la imagen: secretos, dependencias locales, BD y archivos generados
+.env
+.env.*
+!.env.example
+vendor/
+node_modules/
+public/storage
+public/hot
+public/build
+storage/app/public/*
+storage/exports/
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/logs/*
+bootstrap/cache/*.php
+database/*.sqlite
+database/*.sqlite-journal
+.phpunit.cache/
+.phpunit.result.cache
+*.log
+.git
+.idea
+.vscode

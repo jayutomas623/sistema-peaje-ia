@@ -1,0 +1,362 @@
+openapi: 3.0.3
+info:
+  title: Sistema Inteligente de Control de Peaje — API REST
+  version: 1.0.0
+  description: |
+    API del backend Laravel 12 (subdominio HTTPS) y del servidor de inferencia FastAPI (RunPod / Colab).
+
+    **Autenticación**
+    1. La app obtiene un **Google ID Token** con `google_sign_in` y lo envía a `POST /api/v1/auth/google`.
+    2. Si el correo está en la lista blanca (`usuarios.activo = true`) recibe un **Bearer token** (Sanctum) y su rol.
+       Si no, HTTP **403** `"Acceso denegado: cuenta no autorizada"`.
+    3. Todas las rutas usan `Authorization: Bearer <token>` excepto `/auth/google` y `/hardware/ultimo-evento`
+       (este último usa `X-Hardware-Token`).
+servers:
+  - url: https://peaje.tu-dominio.com/api/v1
+    description: Backend Laravel (producción)
+  - url: https://{podId}-8000.proxy.runpod.net
+    description: Servidor de inferencia (RunPod). En Colab, la URL trycloudflare.com del notebook.
+    variables:
+      podId:
+        default: POD_ID
+tags:
+  - name: Autenticación
+  - name: Pasos
+  - name: Placas
+  - name: Casetas
+  - name: Agente
+  - name: Hardware
+  - name: Inferencia (FastAPI)
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/google:
+    post:
+      tags: [Autenticación]
+      summary: Intercambia un Google ID Token por un token Bearer (solo lista blanca)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id_token]
+              properties:
+                id_token: { type: string, description: ID Token de Google (aud = Web Client ID) }
+                dispositivo: { type: string, example: app-movil }
+      responses:
+        '200':
+          description: Autorizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string, example: '12|Xb3…' }
+                  tipo: { type: string, example: Bearer }
+                  rol: { type: string, enum: [administrador, operador] }
+                  usuario: { $ref: '#/components/schemas/Usuario' }
+        '401': { description: ID Token inválido, expirado o emitido para otra aplicación }
+        '403':
+          description: Cuenta de Google fuera de la lista blanca
+          content:
+            application/json:
+              example: { message: 'Acceso denegado: cuenta no autorizada', email: intruso@gmail.com }
+
+  /auth/yo:
+    get:
+      tags: [Autenticación]
+      summary: Usuario autenticado
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { usuario: { $ref: '#/components/schemas/Usuario' } } } } } }
+        '401': { description: No autenticado }
+
+  /auth/logout:
+    post:
+      tags: [Autenticación]
+      summary: Revoca el token actual
+      responses:
+        '200': { description: Sesión cerrada }
+
+  /pasos/frame:
+    post:
+      tags: [Pasos]
+      summary: Procesa un frame de la caseta (ESP32 → inferencia → tarifa → saldo → evidencia → alerta → tiempo real)
+      description: |
+        `modo=auto` (video 2–5 fps): frames sin placa legible NO se registran (`registrado=false`).
+        `modo=manual` (botón): siempre registra, incluso `placa_ilegible` o `error_inferencia`.
+        El mismo vehículo en la misma caseta dentro de 60 s devuelve `duplicado=true` (no se cobra dos veces).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [imagen, caseta_id]
+              properties:
+                imagen: { type: string, format: binary }
+                caseta_id: { type: integer, example: 1 }
+                modo: { type: string, enum: [auto, manual], default: manual }
+      responses:
+        '201':
+          description: Paso registrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResultadoFrame' }
+        '200':
+          description: Frame procesado sin registro (sin vehículo, placa aún ilegible o duplicado)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResultadoFrame' }
+        '422': { description: Validación (imagen o caseta) }
+
+  /placas/consultar:
+    post:
+      tags: [Placas]
+      summary: Clasifica una placa en uno de los 4 estados
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [placa], properties: { placa: { type: string, example: 2481-KLM } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ConsultaPlaca' } } } }
+
+  /placas/consultar-imagen:
+    post:
+      tags: [Placas]
+      summary: Lee la placa de una foto (M1 en RunPod) y la consulta
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, required: [imagen], properties: { imagen: { type: string, format: binary } } }
+      responses:
+        '200': { description: Placa legible, content: { application/json: { schema: { $ref: '#/components/schemas/ConsultaPlaca' } } } }
+        '422': { description: 'No se encontró una placa legible: enviar otra imagen' }
+        '503': { description: Servidor de inferencia no disponible }
+
+  /placas/{placa}/historial:
+    get:
+      tags: [Placas]
+      summary: Últimos pasos de una placa
+      parameters:
+        - { name: placa, in: path, required: true, schema: { type: string }, example: 1985LNH }
+        - { name: limite, in: query, schema: { type: integer, default: 20, maximum: 20 } }
+      responses:
+        '200': { description: OK }
+
+  /casetas:
+    get:
+      tags: [Casetas]
+      summary: Casetas activas (selector de la app)
+      responses:
+        '200': { description: OK }
+
+  /casetas/{id}/resumen:
+    get:
+      tags: [Casetas]
+      summary: Resumen del día de una caseta
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: fecha, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              example: { id: 1, nombre: Peaje Autopista La Paz – El Alto, pasos: 8, autorizados: 5, recaudacion_bs: 32.0,
+                         no_registradas: 1, sin_saldo: 1, ilegibles: 1, pasajeros: 16, alertas_activas: 4, ultimos_pasos: [] }
+
+  /agente/chat:
+    post:
+      tags: [Agente]
+      summary: Agente conversacional (texto y/o imagen) con datos exclusivamente de la BD
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                mensaje: { type: string, example: '¿Pasó la 1151-DKL hoy?' }
+                imagen: { type: string, format: binary }
+                historial: { type: string, description: 'JSON [{rol: usuario|agente, texto}] (últimos 6)' }
+      responses:
+        '200':
+          description: Respuesta del agente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RespuestaAgente' }
+
+  /hardware/ultimo-evento:
+    get:
+      tags: [Hardware]
+      summary: Señal para el ESP32 (polling HTTPS cada 1 s)
+      security: [ { hardwareToken: [] } ]
+      parameters:
+        - { name: caseta_id, in: query, schema: { type: integer } }
+        - { name: rssi, in: query, schema: { type: integer }, description: telemetría Wi-Fi }
+        - { name: fw, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Último evento (idle si tiene más de 12 s)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer, example: 123 }
+                  tipo_senal: { type: string, enum: [idle, inferencia, ok, alerta] }
+                  placa: { type: string, nullable: true, example: 2481KLM }
+                  monto: { type: number, nullable: true, example: 25 }
+                  timestamp: { type: string, format: date-time }
+        '401': { description: X-Hardware-Token inválido }
+
+  /health:
+    servers: [ { url: 'https://{podId}-8000.proxy.runpod.net', variables: { podId: { default: POD_ID } } } ]
+    get:
+      tags: [Inferencia (FastAPI)]
+      summary: Estado del servidor de inferencia
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              example:
+                estado: ok
+                gpu: { cuda_disponible: true, nombre: NVIDIA RTX A4000 }
+                modelos_cargados: { m1_placas: 'yolo-v9-t-384 (ONNX) + fast-plate-ocr', m2_vehiculos: 'pesos/m2_vehiculos_seg.pt (entrenado)',
+                                    m3_ejes: 'pesos/m3_llantas_pose.pt (entrenado)', m4_pasajeros: 'yolo11s-seg.pt (fallback-coco)' }
+                modo_fallback: true
+                latencia_calentamiento_ms: 38.2
+                versiones: { python: 3.11.18, torch: 2.15.0, ultralytics: 8.4.218, onnxruntime: 1.32.0 }
+
+  /inferir:
+    servers: [ { url: 'https://{podId}-8000.proxy.runpod.net', variables: { podId: { default: POD_ID } } } ]
+    post:
+      tags: [Inferencia (FastAPI)]
+      summary: M1 + M2 + M3 + M4 sobre una imagen
+      security: [ { apiToken: [] } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, properties: { imagen: { type: string, format: binary } } }
+          image/jpeg:
+            schema: { type: string, format: binary }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Inferencia' } } } }
+        '401': { description: X-API-Token inválido }
+
+  /inferir-placa:
+    servers: [ { url: 'https://{podId}-8000.proxy.runpod.net', variables: { podId: { default: POD_ID } } } ]
+    post:
+      tags: [Inferencia (FastAPI)]
+      summary: Solo M1 + OCR (consultas rápidas del agente)
+      security: [ { apiToken: [] } ]
+      requestBody:
+        required: true
+        content:
+          image/jpeg: { schema: { type: string, format: binary } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              example: { placa: { texto: 2481KLM, texto_crudo: 2481KLM, formato_bolivia: true, confianza: 0.91, bbox: [290, 370, 470, 460] },
+                         placas: [], legible: true, imagen_anotada_base64: 'data:image/jpeg;base64,...', latencia_ms: 21.4 }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, description: Token Sanctum de /auth/google }
+    hardwareToken: { type: apiKey, in: header, name: X-Hardware-Token }
+    apiToken: { type: apiKey, in: header, name: X-API-Token }
+  schemas:
+    Usuario:
+      type: object
+      properties:
+        id: { type: integer }
+        nombre: { type: string }
+        email: { type: string, example: doc.alvaro.pinto.ma@unifranz.edu.bo }
+        rol: { type: string, enum: [administrador, operador] }
+        avatar: { type: string, nullable: true }
+    Inferencia:
+      type: object
+      description: Contrato exacto del servidor (imágenes referenciales M1, M2 y M3)
+      properties:
+        placa:
+          type: object
+          properties:
+            texto: { type: string, nullable: true, example: 2481KLM }
+            texto_crudo: { type: string, nullable: true, example: 2481-KLM }
+            formato_bolivia: { type: boolean, example: true }
+            confianza: { type: number, example: 0.91 }
+            bbox: { type: array, items: { type: integer }, example: [290, 370, 470, 460] }
+        vehiculo:
+          type: object
+          nullable: true
+          properties:
+            categoria: { type: string, enum: [moto, auto, minibus, bus, camion] }
+            confianza: { type: number, example: 0.88 }
+            area_mascara: { type: number, example: 0.31 }
+            bbox: { type: array, items: { type: integer }, example: [40, 120, 800, 560] }
+        ejes: { type: integer, nullable: true, example: 3, description: null en vista frontal/posterior }
+        vista_vehiculo: { type: string, enum: [lateral, '3/4', frontal/posterior, desconocida] }
+        keypoints: { type: array, items: { type: array, items: { type: number } }, example: [[170, 500, 0.95], [270, 500, 0.93], [680, 500, 0.96]] }
+        pasajeros:
+          type: object
+          properties:
+            conteo: { type: integer, example: 2 }
+            confianza_promedio: { type: number, nullable: true, example: 0.84 }
+        imagen_anotada_base64: { type: string, example: 'data:image/jpeg;base64,...' }
+        latencia_ms: { type: number, example: 142.5 }
+    Paso:
+      type: object
+      properties:
+        id: { type: integer }
+        placa: { type: string, nullable: true }
+        registrado: { type: boolean }
+        propietario: { type: string, nullable: true }
+        saldo: { type: number, nullable: true }
+        caseta: { type: string }
+        categoria: { type: string }
+        ejes: { type: integer }
+        pasajeros: { type: integer, nullable: true }
+        monto: { type: number }
+        estado: { type: string, enum: [autorizado, sin_saldo, no_registrada, placa_ilegible, error_inferencia] }
+        estado_texto: { type: string }
+        evidencia_url: { type: string, nullable: true }
+        fecha: { type: string, format: date-time }
+    ResultadoFrame:
+      type: object
+      properties:
+        registrado: { type: boolean }
+        duplicado: { type: boolean }
+        motivo: { type: string, enum: [sin_vehiculo, placa_no_legible_aun, duplicado, error_inferencia], nullable: true }
+        paso: { $ref: '#/components/schemas/Paso' }
+        inferencia: { $ref: '#/components/schemas/Inferencia' }
+    ConsultaPlaca:
+      type: object
+      properties:
+        estado_codigo: { type: integer, enum: [1, 2, 3, 4] }
+        estado: { type: string, enum: [registrada_con_paso, registrada_sin_paso, identificada_no_registrada, no_existe] }
+        placa: { type: string }
+        vehiculo: { type: object, nullable: true }
+        ultimo_paso: { type: object, nullable: true }
+        sugerencias: { type: array, items: { type: object, properties: { placa: { type: string }, distancia: { type: number }, registrada: { type: boolean } } } }
+        mensaje: { type: string }
+    RespuestaAgente:
+      type: object
+      properties:
+        respuesta: { type: string, example: '❌ Placa 1153DKL: NO EXISTE en el sistema. ¿Quisiste decir 1151DKL?' }
+        estado: { type: string }
+        estado_codigo: { type: integer, nullable: true }
+        placa: { type: string, nullable: true }
+        sugerencias: { type: array, items: { type: string } }
+        datos: { type: object, description: Resultados de las herramientas (BD) usados para responder }
+        fuente: { type: string, example: 'llm:gemini:gemini-2.5-flash | determinista' }
+        imagen_anotada: { type: string, nullable: true }

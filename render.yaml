@@ -1,0 +1,95 @@
+# =====================================================================
+#  Render Blueprint (plan gratuito): web/ Laravel en Docker + PostgreSQL gestionado
+#  Render → New → Blueprint → seleccione este repositorio.
+#  Los valores marcados con sync: false se piden en el panel de Render (NUNCA se escriben aquí).
+# =====================================================================
+databases:
+  - name: peaje-ia-db
+    plan: free
+    databaseName: peaje_ia
+    user: peaje
+
+services:
+  - type: web
+    name: peaje-ia
+    runtime: docker
+    plan: free
+    rootDir: web
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /up
+    autoDeploy: true
+    envVars:
+      # --- App ---
+      - key: APP_NAME
+        value: Peaje IA
+      - key: APP_ENV
+        value: production            # fuerza https en todas las URLs (AppServiceProvider)
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY                 # php artisan key:generate --show  ->  base64:...
+        sync: false
+      - key: APP_URL                 # https://peaje-ia.onrender.com o su subdominio propio
+        sync: false
+      - key: APP_TIMEZONE
+        value: America/La_Paz
+      - key: APP_LOCALE
+        value: es
+      - key: LOG_CHANNEL
+        value: stderr                # los logs aparecen en la pestaña Logs de Render
+      - key: LOG_LEVEL
+        value: warning
+      # --- Base de datos (PostgreSQL de Render) ---
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL
+        fromDatabase:
+          name: peaje-ia-db
+          property: connectionString
+      - key: SESSION_DRIVER
+        value: database
+      - key: SESSION_SECURE_COOKIE
+        value: "true"
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: sync
+      - key: FILESYSTEM_DISK
+        value: public
+      # --- Lista blanca (el docente se precarga siempre como administrador) ---
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: OPERADOR_EMAIL
+        sync: false
+      # --- Google OAuth (el callback se deriva de APP_URL: <APP_URL>/auth/google/callback) ---
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_IDS_EXTRA
+        sync: false
+      # --- Inferencia RunPod / Colab y ESP32 ---
+      - key: INFERENCE_URL
+        sync: false
+      - key: INFERENCE_TOKEN
+        sync: false
+      - key: HARDWARE_TOKEN
+        sync: false
+      # --- Tiempo real (Pusher) ---
+      - key: BROADCAST_CONNECTION
+        value: pusher
+      - key: PUSHER_APP_ID
+        sync: false
+      - key: PUSHER_APP_KEY
+        sync: false
+      - key: PUSHER_APP_SECRET
+        sync: false
+      - key: PUSHER_APP_CLUSTER
+        value: us2
+      # --- Agente ---
+      - key: AGENTE_PROVEEDOR
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash

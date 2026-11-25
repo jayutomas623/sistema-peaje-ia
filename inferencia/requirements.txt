@@ -1,0 +1,2 @@
+# Alias: el entorno de producción del servidor es el de venv (versiones fijadas)
+-r requirements-venv.txt

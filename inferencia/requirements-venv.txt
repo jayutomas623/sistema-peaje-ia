@@ -1,0 +1,39 @@
+# =====================================================================
+#  Entorno VENV (pip) — servidor de inferencia de producción (RunPod/Colab)
+#  Lector OCR principal: fast-plate-ocr (ONNX).  Python 3.11
+#
+#  python3.11 -m venv /workspace/venvs/peaje-venv
+#  source /workspace/venvs/peaje-venv/bin/activate
+#  pip install -r requirements-venv.txt
+#
+#  En Linux, la rueda de torch de PyPI ya incluye CUDA (GPU del Pod).
+#  Versiones verificadas con `pip freeze` (Python 3.11.18, nov-2026).
+# =====================================================================
+
+# --- API ---
+fastapi==0.165.0
+starlette==1.10.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.34
+pydantic==2.14.4
+httpx==0.28.1
+
+# --- M1: detector ONNX + lector de placas ---
+onnxruntime==1.32.0
+fast-plate-ocr[onnx]==1.1.0
+PyYAML==6.0.4
+
+# --- M2 / M3 / M4: Ultralytics YOLO11-seg / pose / YOLOE (GPU) ---
+torch==2.15.0
+torchvision==0.29.2
+ultralytics==8.4.218
+# Codificador de texto de YOLOE (fallback zero-shot de llantas en M3)
+clip @ git+https://github.com/ultralytics/CLIP.git@7ffa84b3bfa40c42ecc1c77147a855e69cb2dd40
+
+# --- Imagen ---
+opencv-python-headless==5.1.0.95
+numpy==2.4.6
+pillow==13.0.0
+
+# --- Pruebas ---
+pytest==9.2.0

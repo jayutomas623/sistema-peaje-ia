@@ -1,0 +1,36 @@
+# =====================================================================
+#  Entorno CONDA — servidor de inferencia + lector comparativo Tesseract
+#  Tesseract NO es un paquete de Python: conda instala el binario nativo.
+#
+#  conda env create -f environment-conda.yml
+#  conda activate peaje-conda
+#  python diagnostico_entorno.py --nombre conda
+#  python app.py
+# =====================================================================
+name: peaje-conda
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.11
+  - pip=26.2.2
+  - numpy=2.4.6
+  - tesseract=5.5.4
+  - pytesseract=0.3.13
+  - pip:
+      - fastapi==0.165.0
+      - starlette==1.10.0
+      - uvicorn[standard]==0.54.0
+      - python-multipart==0.0.34
+      - pydantic==2.14.4
+      - httpx==0.28.1
+      - onnxruntime==1.32.0
+      - fast-plate-ocr[onnx]==1.1.0
+      - PyYAML==6.0.4
+      - torch==2.15.0
+      - torchvision==0.29.2
+      - ultralytics==8.4.218
+      - clip @ git+https://github.com/ultralytics/CLIP.git@7ffa84b3bfa40c42ecc1c77147a855e69cb2dd40
+      - opencv-python-headless==5.1.0.95
+      - pillow==13.0.0
+      - pytest==9.2.0
